@@ -196,7 +196,13 @@ export function aiConnectionRoutes(db: Db, options: Parameters<typeof supportsLo
     const isLocalOperator =
       req.actor.source === "local_implicit" || req.actor.isInstanceAdmin === true;
     res.setHeader("Cache-Control", "no-store");
-    res.json({ models: await probeAiRoutingModels(input.routing, input.apiKey ?? "", { isLocalOperator }) });
+    // The schema guarantees exactly one form: an inline routing endpoint, or a
+    // saved connection whose stored credential the service resolves server-side.
+    res.json({
+      models: input.connectionId
+        ? await service.probeModels(companyId, getActorInfo(req).actorId, input.connectionId, input.grantId, isLocalOperator)
+        : await probeAiRoutingModels(input.routing!, input.apiKey ?? "", { isLocalOperator }),
+    });
   });
   router.post("/companies/:companyId/ai-connections/local/attempts", validate(localAiLoginStartSchema), async (req, res) => {
     const companyId = req.params.companyId as string;

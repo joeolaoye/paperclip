@@ -628,7 +628,11 @@ OpenRouter connections without an explicit model list automatically load its pub
 [model catalog](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties),
 ordered with `sort=most-popular`. New-agent setup and agent settings share this
 discovery path, preserve the provider's ordering, and adapt model IDs to the selected
-harness. Explicit connection model lists take precedence. Catalog discovery sends
+harness. Local and gateway connections have no public catalog. On those, the same
+model picker's Refresh action lists models from the connection's endpoint through
+`probe-models`, resolving the stored credential server-side; the destination rules
+above apply. Explicit connection model lists take precedence until a refresh
+succeeds. Catalog discovery sends
 no credentials; a failed request offers refresh and manual model entry.
 
 `config.ai.routing` stores only kind, protocol, URL, auth method, region, and

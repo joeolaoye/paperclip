@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { aiRoutingModel, type AiConnectionBinding, type AiProviderRouting } from "@paperclipai/shared";
 import { aiConnectionsApi } from "@/api/ai-connections";
 import { agentsApi } from "@/api/agents";
@@ -32,12 +32,32 @@ export function useConnectionModelsState(
     staleTime: 60_000,
     retry: false,
   });
+  // Local and gateway connections have no public catalog: the model picker's
+  // refresh lists their endpoint directly, with the stored credential resolved
+  // server-side.
+  const endpointRoute = routing?.kind === "local" || routing?.kind === "gateway";
+  const endpointProbe = useMutation({
+    mutationFn: async () => {
+      const models = await aiConnectionsApi.probeRoutingModels(companyId!, {
+        connectionId: connection!.id,
+        grantId: connection!.grantId,
+      });
+      // Tag results so a probe started for another connection is never shown.
+      return { connectionId: connection!.id, models: models.models };
+    },
+  });
   const effectiveRouting: AiProviderRouting | undefined = routing ?? (openRouter
     ? { kind: "openrouter", protocol: "chat", auth: "bearer", models: [] }
     : undefined);
+  const probedModels =
+    endpointProbe.data && endpointProbe.data.connectionId === connection?.id
+      ? endpointProbe.data.models
+      : [];
   const modelOptions = discover
     ? (catalog.data ?? []).map((m) => ({ ...m, id: ["opencode_local", "pi_local"].includes(harness) ? m.id : m.id.replace(/^openrouter\//, "") }))
-    : routing?.models ?? [];
+    : endpointRoute && probedModels.length > 0
+      ? probedModels
+      : routing?.models ?? [];
   const connectionModels = effectiveRouting
     ? {
         models: modelOptions.map((m) => ({
@@ -45,9 +65,13 @@ export function useConnectionModelsState(
           label: m.label ?? m.id,
         })),
         isLoading: discover && catalog.isLoading,
-        error: discover ? catalog.error : null,
-        refreshing: discover && catalog.isFetching,
-        refreshModels: discover ? async () => { await catalog.refetch(); } : undefined,
+        error: discover ? catalog.error : endpointRoute ? endpointProbe.error : null,
+        refreshing: (discover && catalog.isFetching) || endpointProbe.isPending,
+        refreshModels: discover
+          ? async () => { await catalog.refetch(); }
+          : endpointRoute
+            ? async () => { await endpointProbe.mutateAsync().catch(() => {}); }
+            : undefined,
         resolveModel: (model: string) =>
           aiRoutingModel(effectiveRouting, harness, model),
       }

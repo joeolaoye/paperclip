@@ -46,6 +46,7 @@ import { logger } from "../middleware/logger.js";
 import { logActivity } from "./activity-log.js";
 import { secretService } from "./secrets.js";
 import { probeAiConnectionUsage } from "./ai-connection-usage.js";
+import { probeAiRoutingModels } from "./ai-routing-models-probe.js";
 
 /** Same human audience displayed by the existing Connections identity controls. */
 function canUseCredential(
@@ -244,6 +245,30 @@ export function aiConnectionService(db: Db) {
     }
     const value = await credential(row);
     return { ...identity, ...await probeAiConnectionUsage(metadata.data, value) };
+  }
+  /** Lists models from a saved local or gateway connection's endpoint, using its stored credential. */
+  async function probeModels(
+    companyId: string,
+    userId: string,
+    connectionId: string,
+    grantId: string | undefined,
+    isLocalOperator: boolean,
+  ): Promise<Array<{ id: string; label: string }>> {
+    if (!(await membership(companyId, userId))) throw forbidden("An active company member is required");
+    const candidates = (await rows(companyId)).filter((row) => row.connection.id === connectionId && (!grantId || row.grant.id === grantId));
+    const audience = await db.select().from(connectionGrantMembers).where(eq(connectionGrantMembers.companyId, companyId));
+    const visible = candidates.filter(({ grant }) => canUseCredential(grant, userId, audience.filter((member) => member.grantId === grant.id)));
+    if (!visible.length) throw notFound("AI connection not found");
+    if (visible.length > 1) throw unprocessable("Choose a credential grant for this model check");
+    const row = visible[0]!;
+    const metadata = aiConnectionMetadataSchema.safeParse(row.connection.config.ai);
+    if (!metadata.success || !metadata.data.routing)
+      throw unprocessable("This connection has no custom endpoint routing.", { code: "ai_routing_models_probe_unrouted" });
+    if (row.grant.status !== "active" || !row.connection.enabled || row.connection.status !== "active")
+      throw unprocessable("Reconnect or enable this AI connection before listing its models.", { code: "connection_unavailable" });
+    const routing = metadata.data.routing;
+    const value = routing.auth === "none" ? "" : await credential(row);
+    return probeAiRoutingModels(routing, value, { isLocalOperator });
   }
   async function select(input: {
     companyId: string;
@@ -1157,5 +1182,5 @@ export function aiConnectionService(db: Db) {
       return [{ ...row, summary }];
     });
   }
-  return { list, selectDecision, selectFastResponse, selectPromptInjectionPrevention, quotaAccounts, subscriptionAccounts: (companyId: string, userId: string) => quotaAccounts(companyId, userId, true), refreshQuotaCredential, select, credential, runtimeCredential, probeUsage, save, setDefault, membership, markAuthenticationFailed };
+  return { list, selectDecision, selectFastResponse, selectPromptInjectionPrevention, quotaAccounts, subscriptionAccounts: (companyId: string, userId: string) => quotaAccounts(companyId, userId, true), refreshQuotaCredential, select, credential, runtimeCredential, probeUsage, probeModels, save, setDefault, membership, markAuthenticationFailed };
 }

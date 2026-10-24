@@ -227,15 +227,26 @@ export const createAiConnectionSchema = z
   });
 export type CreateAiConnection = z.infer<typeof createAiConnectionSchema>;
 
-/** Pre-save model discovery for a routing endpoint. The API key is used for the
- * probe request only and is never persisted by this operation. */
+/** Pre-save model discovery for a routing endpoint. The inline form carries a
+ * transient key used for the probe only; the saved-connection form resolves the
+ * stored credential server-side. Neither is persisted by this operation. */
 export const aiRoutingModelsProbeSchema = z
   .object({
-    routing: aiProviderRoutingSchema,
+    routing: aiProviderRoutingSchema.optional(),
     apiKey: z.string().trim().min(1).max(32768).optional(),
+    connectionId: z.string().uuid().optional(),
+    grantId: z.string().uuid().optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
+    if (v.connectionId) {
+      if (v.routing || v.apiKey) ctx.addIssue({ code: "custom", message: "Provide either a saved connection or an inline routing endpoint, not both." });
+      return;
+    }
+    if (!v.routing) {
+      ctx.addIssue({ code: "custom", message: "Provide a routing endpoint or a saved connection." });
+      return;
+    }
     if (v.routing.auth === "none") {
       if (v.apiKey) ctx.addIssue({ code: "custom", message: "Provide only the selected authentication method." });
       return;
