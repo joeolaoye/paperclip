@@ -76,7 +76,7 @@ describe("assertProbeDestinationAllowed", () => {
   });
 
   it("rejects gateway URLs that are or resolve to private addresses", async () => {
-    for (const hostname of ["127.0.0.1", "10.1.2.3", "192.168.1.10", "169.254.169.254", "172.20.0.5"]) {
+    for (const hostname of ["127.0.0.1", "10.1.2.3", "192.168.1.10", "169.254.169.254", "172.20.0.5", "[::1]", "[fe80::1]"]) {
       await expect(
         assertProbeDestinationAllowed(route({ kind: "gateway", protocol: "chat", baseUrl: `https://${hostname}/v1`, auth: "none" }), true),
       ).rejects.toMatchObject({ status: 422, details: { code: "ai_routing_models_probe_private_target" } });
@@ -88,6 +88,24 @@ describe("assertProbeDestinationAllowed", () => {
         async () => ["10.0.0.9"],
       ),
     ).rejects.toMatchObject({ status: 422, details: { code: "ai_routing_models_probe_private_target" } });
+  });
+
+  it("accepts public IPv6 gateway literals and maps DNS failures to unreachable", async () => {
+    await expect(
+      assertProbeDestinationAllowed(
+        route({ kind: "gateway", protocol: "chat", baseUrl: "https://[2606:2800:220:1:248:1893:25c8:1946]/v1", auth: "none" }),
+        true,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertProbeDestinationAllowed(
+        route({ kind: "gateway", protocol: "chat", baseUrl: "https://typo.example.invalid/v1", auth: "none" }),
+        true,
+        async () => {
+          throw new Error("getaddrinfo ENOTFOUND typo.example.invalid");
+        },
+      ),
+    ).rejects.toMatchObject({ status: 422, details: { code: "ai_routing_models_probe_unreachable" } });
   });
 
   it("allows public gateway targets and the fixed OpenRouter endpoint", async () => {

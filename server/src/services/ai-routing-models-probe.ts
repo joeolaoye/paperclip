@@ -66,8 +66,21 @@ export async function assertProbeDestinationAllowed(
       );
     return;
   }
-  const hostname = new URL(route.baseUrl ?? "").hostname;
-  const addresses = net.isIP(hostname) ? [hostname] : await lookup(hostname);
+  const rawHostname = new URL(route.baseUrl ?? "").hostname;
+  // URL.hostname keeps the brackets on IPv6 literals; strip them for IP checks and lookup.
+  const hostname =
+    rawHostname.startsWith("[") && rawHostname.endsWith("]")
+      ? rawHostname.slice(1, -1)
+      : rawHostname;
+  let addresses: string[];
+  try {
+    addresses = net.isIP(hostname) ? [hostname] : await lookup(hostname);
+  } catch {
+    // An unresolvable or mistyped host is a user-input problem, not a server error.
+    throw unprocessable("Could not reach the endpoint. Check the URL and try again.", {
+      code: "ai_routing_models_probe_unreachable",
+    });
+  }
   if (addresses.some((address) => isPrivateAddress(address)))
     throw unprocessable("The gateway URL must resolve to a public address.", {
       code: "ai_routing_models_probe_private_target",
