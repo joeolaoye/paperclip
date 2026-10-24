@@ -226,6 +226,24 @@ describe("probeAiRoutingModels request shape", () => {
     ).rejects.toMatchObject({ status: 422, details: { code: "ai_routing_models_probe_unreachable" } });
   });
 
+  it("names the HTTPS-against-plain-HTTP mistake on loopback endpoints", async () => {
+    await expect(
+      probeAiRoutingModels(
+        route({ kind: "local", protocol: "chat", baseUrl: "https://localhost:11434/v1", auth: "none" }),
+        "",
+        {
+          request: (async () => {
+            throw new Error("fetch failed", { cause: { code: "ERR_TLS_CERT_ALTNAME_INVALID" } });
+          }) as unknown as typeof fetch,
+          isLocalOperator: true,
+        },
+      ),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringContaining("plain HTTP"),
+    });
+  });
+
   it("rejects non-JSON responses", async () => {
     await expect(
       probeAiRoutingModels(route(localChat), "", {

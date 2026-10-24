@@ -169,7 +169,20 @@ export async function probeAiRoutingModels(
       signal: AbortSignal.timeout(options.timeoutMs ?? PROBE_TIMEOUT_MS),
       headers: headersFor(route, apiKey),
     });
-  } catch {
+  } catch (error) {
+    // A TLS failure against a plain-HTTP model server (Ollama and friends) is
+    // the common scheme mistake; name it instead of a generic unreachable.
+    const code = (error as { cause?: { code?: string } })?.cause?.code ?? "";
+    const url = probeModelsUrl(route);
+    if (code.includes("TLS") || code.includes("SSL") || ["UNABLE_TO_VERIFY_LEAF_SIGNATURE", "SELF_SIGNED_CERT_IN_CHAIN", "DEPTH_ZERO_SELF_SIGNED_CERT", "CERT_HAS_EXPIRED"].includes(code)) {
+      const loopback = /^https:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(url);
+      throw unprocessable(
+        loopback
+          ? "This local endpoint refused HTTPS. Local model servers such as Ollama serve plain HTTP; check the URL scheme."
+          : "The endpoint refused a TLS connection. Check the URL scheme and certificate.",
+        { code: "ai_routing_models_probe_unreachable" },
+      );
+    }
     throw unprocessable("Could not reach the endpoint. Check the URL and try again.", { code: "ai_routing_models_probe_unreachable" });
   }
   if (!response.ok) {
