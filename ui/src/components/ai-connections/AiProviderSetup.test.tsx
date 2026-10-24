@@ -124,6 +124,37 @@ it("allows an ordinary member to save a personal gateway before the agent exists
 });
 
 
+it("drops a probe reply that arrives after the endpoint URL changed", async () => {
+  let resolveProbe: ((value: { models: Array<{ id: string }> }) => void) | undefined;
+  vi.mocked(aiConnectionsApi.probeRoutingModels).mockImplementationOnce(
+    () => new Promise((resolve) => { resolveProbe = resolve; }),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });
+  client.setQueryData(["agents", "company", "provider-access"], []);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<QueryClientProvider client={client}><TooltipProvider><AiProviderSetup companyId="company" initialProvider="local" initialProtocol="chat" onCancel={() => {}} onComplete={() => {}} /></TooltipProvider></QueryClientProvider>));
+    await expandAccessDefaults(container);
+    await act(async () => setInputValue(container.querySelector('input[aria-label="Provider URL"]')!, "http://localhost:11434/v1"));
+    await act(async () => setInputValue(container.querySelector('input[aria-label="API key"]')!, "fixture-key"));
+    await act(async () => (Array.from(container.querySelectorAll("button")).find(b => b.textContent === "Fetch models") as HTMLButtonElement).click());
+    await act(async () => setInputValue(container.querySelector('input[aria-label="Provider URL"]')!, "http://localhost:11500/v1"));
+    await act(async () => resolveProbe!({ models: [{ id: "qwen3-coder:30b" }] }));
+    await vi.waitFor(() => expect(fetchModelsSettled(container)).toBe(true));
+    expect((container.querySelector('input[aria-label="Model IDs"]') as HTMLInputElement).value).toBe("");
+  } finally {
+    await act(async () => root.unmount()); container.remove(); client.clear();
+  }
+});
+
+/** The status line only renders once the mutation has settled, success or error. */
+function fetchModelsSettled(container: HTMLElement): boolean {
+  return Boolean(container.querySelector('[role="status"]')) || Boolean(container.querySelector('[role="alert"]'));
+}
+
 it.each(["google", "openai", "anthropic", "xai"] as const)("allows an ordinary member to connect a personal %s account before an agent exists", async provider => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: false, connections: [] });

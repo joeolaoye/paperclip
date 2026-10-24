@@ -193,8 +193,10 @@ export function aiConnectionRoutes(db: Db, options: Parameters<typeof supportsLo
     );
     if (membership?.membershipRole === "viewer")
       throw forbidden("Viewers cannot create AI connections");
+    const isLocalOperator =
+      req.actor.source === "local_implicit" || req.actor.isInstanceAdmin === true;
     res.setHeader("Cache-Control", "no-store");
-    res.json({ models: await probeAiRoutingModels(input.routing, input.apiKey ?? "") });
+    res.json({ models: await probeAiRoutingModels(input.routing, input.apiKey ?? "", { isLocalOperator }) });
   });
   router.post("/companies/:companyId/ai-connections/local/attempts", validate(localAiLoginStartSchema), async (req, res) => {
     const companyId = req.params.companyId as string;

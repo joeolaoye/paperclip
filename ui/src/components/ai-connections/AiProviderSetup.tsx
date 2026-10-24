@@ -210,21 +210,29 @@ export function AiProviderSetup({
     },
   });
   const modelsProbeSupported =
-    provider === "openrouter" || provider === "gateway" || provider === "local";
+    !reconnect && (provider === "openrouter" || provider === "gateway" || provider === "local");
   const modelsProbeReady =
     modelsProbeSupported &&
     (provider !== "gateway" && provider !== "local" || baseUrl.trim().length > 0) &&
     (auth === "none" || apiKey.trim().length > 0);
+  /** Identity of the inputs a probe was started with; stale replies are dropped when it changes. */
+  const probeInputs = () => `${provider}|${protocol}|${auth}|${baseUrl.trim()}|${apiKey.trim()}`;
   const fetchModels = useMutation({
-    mutationFn: () =>
-      aiConnectionsApi.probeRoutingModels(
+    mutationFn: async () => {
+      const inputs = probeInputs();
+      const result = await aiConnectionsApi.probeRoutingModels(
         companyId,
         aiRoutingModelsProbeSchema.parse({
           routing: buildRouting(),
           ...(auth !== "none" ? { apiKey } : {}),
         }),
-      ),
-    onSuccess: (result) => setModels(result.models.map((m) => m.id).join(", ")),
+      );
+      return { result, inputs };
+    },
+    onSuccess: ({ result, inputs }) => {
+      if (inputs !== probeInputs()) return;
+      setModels(result.models.map((m) => m.id).join(", "));
+    },
   });
   const choices = (advancedOnly: boolean) => (
     <ConnectionChoiceList
@@ -280,11 +288,11 @@ export function AiProviderSetup({
           >
             {fetchModels.isPending ? "Fetching…" : "Fetch models"}
           </Button>
-          {fetchModels.isSuccess && (
+          {fetchModels.isSuccess && fetchModels.data && (
             <p role="status" className="text-xs text-muted-foreground">
-              {fetchModels.data.models.length === 0
+              {fetchModels.data.result.models.length === 0
                 ? "The endpoint returned no models."
-                : `Found ${fetchModels.data.models.length} model${fetchModels.data.models.length === 1 ? "" : "s"}.`}
+                : `Found ${fetchModels.data.result.models.length} model${fetchModels.data.result.models.length === 1 ? "" : "s"}.`}
             </p>
           )}
           {fetchModels.isError && (

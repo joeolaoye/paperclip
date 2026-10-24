@@ -618,8 +618,11 @@ this implementation. Connection setup does offer a **Fetch models** probe for
 custom gateway, local endpoint, and OpenRouter connections. The probe calls the
 configured endpoint's OpenAI-compatible model list (`GET {base URL}/models`)
 with the entered credential. It fills the connection's model ID field. Results
-are deduplicated, sorted, and capped at the routing schema's model limit.
-Bedrock has no compatible model list; enter its model IDs manually.
+are deduplicated, sorted, and capped at the routing schema's model limit. The
+read stops when the response passes 1 MiB. Local endpoint discovery runs on the
+Paperclip server's loopback, so only the local operator can use it. Gateway
+targets must resolve to public addresses. Bedrock has no compatible model list;
+enter its model IDs manually.
 
 OpenRouter connections without an explicit model list automatically load its public
 [model catalog](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties),
