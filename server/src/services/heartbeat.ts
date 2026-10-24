@@ -2614,7 +2614,7 @@ export function heartbeatService(
         run, agent,
         task: { issueId, context, responsibleUserId, acceptedPlanContinuationWake, acceptedPlanWakeRoutingDecision, taskProjectContext, routineEnvContext },
         config: { sourceWorkspaceConfig, aiBinding },
-        policy: { trustPreset, useIsolatedTaskDirectory, explicitTaskDirectory },
+        policy: { trustPreset, useIsolatedTaskDirectory, explicitTaskDirectory, requestedExecutionWorkspaceMode },
         environment: { selectedEnvironmentId, selectedEnvironmentForConfig, resolvedInstanceSettings, persistedNativeExecutionInput },
         services: { secretsSvc, companySkills, appendRunEvent, finalizeAiConnectionBusyDeferral },
         onFailureSecretsResolved: (readSecrets) => { readFailureReportSecrets = () => [...readSecrets(), ...identityRedactor.values]; },

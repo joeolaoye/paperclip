@@ -26,6 +26,8 @@ OpenCode and ACPX require the existing qualified provider profiles.
 Workspace-free providers are not supported here. Codex warm retention is opt-in through `warmTaskVersion: 1`; ACPX and OpenCode remain per-turn.
 The plugin owns project workspace preparation. Core does not prepare or reuse
 a Core Git worktree for a task-only environment.
+Selecting a plain task directory does not add redundant default configuration.
+Retaining that directory does not itself change the run configuration.
 For plugin-backed project storage, Core uses the workspace provider contract.
 The storage plugin must also provide the selected execution environment.
 Its declared workspace modes and strategies remain in effect.
